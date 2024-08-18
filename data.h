@@ -82,10 +82,6 @@ const char index_html[] PROGMEM = R"rawliteral(
       X: <span id="x_coordinate">0</span> Y: <span id="y_coordinate">0</span> Z:
       <span id="z_value">0</span>
     </p>
-    <p>
-      θ1: <span id="theta1">0</span> θ2: <span id="theta2">0</span> θ3:
-      <span id="theta3">0</span>
-    </p>
     <input
       type="range"
       id="slider"
@@ -101,6 +97,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         ctx,
         paint = false,
         coord = { x: 0, y: 0 };
+      z = 0;
       const minValues = { x: -124, y: -134, z: -322 };
       const maxValues = { x: 124, y: 139, z: -173 };
       var x_orig, y_orig, outerRadius;
@@ -133,13 +130,15 @@ const char index_html[] PROGMEM = R"rawliteral(
         document.getElementById("x_coordinate").innerText = data.x;
         document.getElementById("y_coordinate").innerText = data.y;
         document.getElementById("z_value").innerText = data.z;
-        document.getElementById("theta1").innerText = data.theta1.toFixed(2);
-        document.getElementById("theta2").innerText = data.theta2.toFixed(2);
-        document.getElementById("theta3").innerText = data.theta3.toFixed(2);
       }
 
       function doSend(message) {
         websocket.send(JSON.stringify(message));
+      }
+
+      async function sendMessage(x, y, z) {
+        const message = { x, y, z };
+        await doSend(message);
       }
 
       window.addEventListener("load", () => {
@@ -157,7 +156,6 @@ const char index_html[] PROGMEM = R"rawliteral(
         window.addEventListener("resize", resizeCanvas);
 
         // Add event listener for the slider
-
         var slider = document.getElementById("slider");
         slider.addEventListener("input", updateSlider);
       });
@@ -250,11 +248,10 @@ const char index_html[] PROGMEM = R"rawliteral(
             )
           );
 
-          // Update the display with the calculated values
           document.getElementById("x_coordinate").innerText = x_relative;
           document.getElementById("y_coordinate").innerText = y_relative;
 
-          await send(x_relative, y_relative);
+          sendMessage(x_relative, y_relative, z);
         }
       }
 
@@ -266,84 +263,21 @@ const char index_html[] PROGMEM = R"rawliteral(
         return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
       }
 
-      async function send(x, y) {
-        var zValue = document.getElementById("slider").value;
-        var z = Math.round(mapValue(zValue, 0, 100, minValues.z, maxValues.z));
-        var { theta1, theta2, theta3, fl } = IKinem(x, y, z);
-
-        if (fl === 0) {
-          document.getElementById("theta1").innerText = theta1.toFixed(2);
-          document.getElementById("theta2").innerText = theta2.toFixed(2);
-          document.getElementById("theta3").innerText = theta3.toFixed(2);
-
-          doSend({
-              x: x,
-              y: y,
-              z: z,
-              theta1: theta1,
-              theta2: theta2,
-              theta3: theta3,
-          });
-        } else {
-          document.getElementById("theta1").innerText = "N/A";
-          document.getElementById("theta2").innerText = "N/A";
-          document.getElementById("theta3").innerText = "N/A";
-        }
-      }
-
       function updateSlider(event) {
         var sliderValue = event.target.value;
-        var z = Math.round(
-          mapValue(sliderValue, 0, 100, minValues.z, maxValues.z)
-        );
+        z = Math.round(mapValue(sliderValue, 0, 100, minValues.z, maxValues.z));
         document.getElementById("z_value").innerText = z;
-        // Send updated Z value along with current X and Y
-        send(coord.x, coord.y);
-      }
 
-      function IKinem(X, Y, Z) {
-        const R = 120;
-        const r = 30;
-        const L = 90;
-        const l = 250;
+        // Send current x, y, and updated z
+        const x_relative = parseInt(
+          document.getElementById("x_coordinate").innerText
+        );
+        const y_relative = parseInt(
+          document.getElementById("y_coordinate").innerText
+        );
 
-        function IKinemTh(x0, y0, z0) {
-          const y1 = -R;
-          y0 = y0 - r;
-
-          const a =
-            (x0 * x0 + y0 * y0 + z0 * z0 + L * L - l * l - y1 * y1) / (2 * z0);
-          const b = (y1 - y0) / z0;
-          const D = -(a + b * y1) * (a + b * y1) + L * L * (b * b + 1);
-
-          if (D < 0) {
-            return NaN;
-          } else {
-            const yj = (y1 - a * b - Math.sqrt(D)) / (b * b + 1);
-            const zj = a + b * yj;
-            let theta = Math.atan(-zj / (y1 - yj));
-            if (yj > y1) {
-              theta += Math.PI;
-            }
-            return (theta * 180) / Math.PI;
-          }
-        }
-
-        const theta1 = IKinemTh(X, Y, Z);
-        const x0_2 =
-          X * Math.cos((2 * Math.PI) / 3) + Y * Math.sin((2 * Math.PI) / 3);
-        const y0_2 =
-          Y * Math.cos((2 * Math.PI) / 3) - X * Math.sin((2 * Math.PI) / 3);
-        const theta2 = IKinemTh(x0_2, y0_2, Z);
-
-        const x0_3 =
-          X * Math.cos((2 * Math.PI) / 3) - Y * Math.sin((2 * Math.PI) / 3);
-        const y0_3 =
-          Y * Math.cos((2 * Math.PI) / 3) + X * Math.sin((2 * Math.PI) / 3);
-        const theta3 = IKinemTh(x0_3, y0_3, Z);
-
-        const fl = !isNaN(theta1) && !isNaN(theta2) && !isNaN(theta3) ? 0 : -1;
-        return { theta1, theta2, theta3, fl };
+        // Send the message with current x, y, and updated z
+        sendMessage(x_relative, y_relative, z);
       }
     </script>
   </body>
